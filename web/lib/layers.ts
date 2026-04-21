@@ -84,7 +84,7 @@ export const LAYERS: LayerDef[] = [
     id: "maize",
     name: "Maize (WorldCereal)",
     description: "ESA WorldCereal 2021 — 10m global maize detection",
-    palette: ["#FFD700"],
+    palette: ["#e6550d"],
     min: 0,
     max: 100,
     defaultVisible: false,
@@ -94,7 +94,7 @@ export const LAYERS: LayerDef[] = [
     id: "cereals",
     name: "Cereals (WorldCereal)",
     description: "ESA WorldCereal 2021 — 10m winter & spring cereals",
-    palette: ["#DAA520"],
+    palette: ["#756bb1"],
     min: 0,
     max: 100,
     defaultVisible: false,
@@ -186,7 +186,7 @@ export function buildEEImage(ee: any, layerId: string) {
         .filter(ee.Filter.eq("product", "maize"))
         .select("classification")
         .mosaic();
-      return { image: maize.eq(100).selfMask(), visParams: { palette: ["#FFD700"], min: 0, max: 1 } };
+      return { image: maize.eq(100).selfMask(), visParams: { palette: ["#e6550d"], min: 0, max: 1 } };
     }
     case "cereals": {
       const winter = ee.ImageCollection("ESA/WorldCereal/2021/MODELS/v100")
@@ -198,7 +198,7 @@ export function buildEEImage(ee: any, layerId: string) {
         .select("classification")
         .mosaic();
       const cereals = winter.eq(100).or(spring.eq(100)).selfMask();
-      return { image: cereals, visParams: { palette: ["#DAA520"], min: 0, max: 1 } };
+      return { image: cereals, visParams: { palette: ["#756bb1"], min: 0, max: 1 } };
     }
     case "cassava-suitability": {
       const cassava = ee.ImageCollection("projects/sat-io/open-datasets/CROP_SUITE/crop_suitability")
