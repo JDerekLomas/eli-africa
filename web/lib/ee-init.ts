@@ -22,7 +22,7 @@ export async function getEE(): Promise<typeof ee> {
           },
           (err: Error) => reject(err),
           null,
-          process.env.EE_PROJECT_ID || "gen-lang-client-0278315411"
+          (process.env.EE_PROJECT_ID || "gen-lang-client-0278315411").trim()
         );
       },
       (err: Error) => reject(err)
