@@ -46,9 +46,19 @@ export default function EEMap({ activeLayers, layerOpacity, onMapClick }: MapPro
       zoomControl: false,
     });
 
+    // Base map without labels
     L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+      "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
       { attribution: '&copy; <a href="https://carto.com/">CARTO</a>', maxZoom: 18 }
+    ).addTo(map);
+
+    // Labels layer on top of everything (added to a high-z pane)
+    map.createPane("labels");
+    map.getPane("labels")!.style.zIndex = "650";
+    map.getPane("labels")!.style.pointerEvents = "none";
+    L.tileLayer(
+      "https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png",
+      { maxZoom: 18, pane: "labels" }
     ).addTo(map);
 
     L.control.zoom({ position: "topright" }).addTo(map);
