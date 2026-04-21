@@ -71,8 +71,6 @@ export default function Home() {
       if (data.tileUrl) {
         setActiveLayers((prev) => ({ ...prev, "vulnerability-index": true }));
         setLayerOpacity((prev) => ({ ...prev, "vulnerability-index": 0.7 }));
-        // Store the tile URL for the map to use
-        window.__vulnTileUrl = data.tileUrl;
         window.dispatchEvent(new CustomEvent("custom-tile", {
           detail: { id: "vulnerability-index", url: data.tileUrl, opacity: 0.7 },
         }));
