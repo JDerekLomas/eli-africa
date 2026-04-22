@@ -1,24 +1,21 @@
 """
 Export Sentinel-2 tiles for cocoa classification experiment.
 
-Exports 256x256 pixel tiles from:
-1. Ghana (labeled cocoa + non-cocoa from FDP model)
-2. Nigeria cocoa belt (unlabeled target)
-3. Nigeria savanna (negative control)
-
-Outputs: RGB PNGs + NIR false-color PNGs + metadata JSON per tile
-Stored in: Google Cloud Storage bucket for Gemini batch processing
+Uses grid-based sampling (not random EE sampling) for reliability.
+Exports in batches with retry logic and progress tracking.
 
 Usage:
     source .venv/bin/activate
-    python scripts/export-cocoa-tiles.py
+    python scripts/export-cocoa-tiles.py [--test] [--resume]
 """
 
 import ee
 import json
-import os
+import sys
+import time
 import requests
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Initialize Earth Engine
 credentials = ee.ServiceAccountCredentials(
@@ -28,313 +25,384 @@ credentials = ee.ServiceAccountCredentials(
 ee.Initialize(credentials, project='gen-lang-client-0278315411')
 print("Connected to Earth Engine")
 
-# Output directory
-OUTPUT_DIR = Path("tiles")
-OUTPUT_DIR.mkdir(exist_ok=True)
-
 # --- Configuration ---
-TILE_SIZE = 256  # pixels
-SCALE = 10  # meters/pixel (Sentinel-2 native)
-TILE_EXTENT = TILE_SIZE * SCALE  # 2560m = 2.56km
+TILE_SIZE = 256
+SCALE = 10
+TILE_EXTENT = TILE_SIZE * SCALE  # 2560m
+OUTPUT_DIR = Path("tiles")
+PROGRESS_FILE = OUTPUT_DIR / "progress.json"
+MAX_WORKERS = 4  # parallel downloads
+MAX_RETRIES = 3
 
-# Sentinel-2 cloud-free composite for 2024
-def get_s2_composite(region):
-    """Get cloud-free Sentinel-2 composite for a region."""
-    return (
-        ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
-        .filterDate("2024-01-01", "2024-12-31")
-        .filterBounds(region)
-        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 20))
-        .select(["B2", "B3", "B4", "B8"])  # Blue, Green, Red, NIR
-        .median()
-    )
+# Precompute global images once (not per-tile)
+print("Loading global composites...")
+S2 = (
+    ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+    .filterDate("2024-01-01", "2024-12-31")
+    .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 15))
+    .select(["B2", "B3", "B4", "B8"])
+    .median()
+)
 
-# FDP cocoa probability (Ghana/CI only)
-cocoa_prob = ee.ImageCollection(
+COCOA_PROB = ee.ImageCollection(
     "projects/forestdatapartnership/assets/cocoa/model_2025a"
 ).mosaic()
 
-# Context layers
-worldcover = ee.Image("ESA/WorldCover/v200/2021")
-elevation = ee.Image("USGS/SRTMGL1_003")
-dynamic_world = (
-    ee.ImageCollection("GOOGLE/DYNAMICWORLD/V1")
-    .filterDate("2024-01-01", "2024-12-31")
-    .select("label")
-    .mode()
-)
+ELEVATION = ee.Image("USGS/SRTMGL1_003")
 
-# Annual rainfall
-rainfall = (
+RAINFALL = (
     ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
     .filterDate("2023-01-01", "2023-12-31")
     .select("precipitation")
     .sum()
 )
 
+DW = (
+    ee.ImageCollection("GOOGLE/DYNAMICWORLD/V1")
+    .filterDate("2024-01-01", "2024-12-31")
+    .select("label")
+    .mode()
+)
 
-def generate_grid_points(geometry, spacing_m):
-    """Generate a grid of points within a geometry."""
-    bounds = geometry.bounds().getInfo()["coordinates"][0]
-    min_lng = min(p[0] for p in bounds)
-    max_lng = max(p[0] for p in bounds)
-    min_lat = min(p[1] for p in bounds)
-    max_lat = max(p[1] for p in bounds)
+WORLDCOVER = ee.Image("ESA/WorldCover/v200/2021")
+print("Composites loaded.")
 
-    # Convert spacing from meters to degrees (approximate)
-    spacing_deg = spacing_m / 111000
 
+def generate_grid(bbox, spacing_km):
+    """Generate lat/lng grid within a bounding box.
+    bbox: (min_lng, min_lat, max_lng, max_lat)
+    spacing_km: grid spacing in km
+    """
+    min_lng, min_lat, max_lng, max_lat = bbox
+    spacing_deg = spacing_km / 111.0
     points = []
     lat = min_lat
     while lat < max_lat:
         lng = min_lng
         while lng < max_lng:
-            points.append((lat, lng))
+            points.append((round(lat, 4), round(lng, 4)))
             lng += spacing_deg
         lat += spacing_deg
-
     return points
 
 
-def get_tile_metadata(lat, lng):
-    """Get context metadata for a tile location."""
-    point = ee.Geometry.Point([lng, lat])
-
-    elev_val = elevation.reduceRegion(
-        reducer=ee.Reducer.mean(), geometry=point, scale=30
-    ).get("elevation")
-
-    rain_val = rainfall.reduceRegion(
-        reducer=ee.Reducer.mean(), geometry=point, scale=5000
-    ).get("precipitation")
-
-    dw_val = dynamic_world.reduceRegion(
-        reducer=ee.Reducer.mode(), geometry=point, scale=10
-    ).get("label")
-
-    wc_val = worldcover.reduceRegion(
-        reducer=ee.Reducer.mode(), geometry=point, scale=10
-    ).get("Map")
-
-    info = ee.Dictionary({
-        "elevation": elev_val,
-        "rainfall": rain_val,
-        "dynamic_world": dw_val,
-        "worldcover": wc_val,
-    }).getInfo()
-
-    return info
+def get_thumb_url(image, bands, vis_min, vis_max, region):
+    """Get a thumbnail URL from EE."""
+    return image.getThumbURL({
+        "bands": bands,
+        "min": vis_min,
+        "max": vis_max,
+        "dimensions": TILE_SIZE,
+        "region": region,
+        "format": "png",
+    })
 
 
-def export_tile(lat, lng, tile_id, region_name, label=None):
-    """Export a single tile as RGB + NIR-R-G thumbnails."""
+def download_with_retry(url, path, retries=MAX_RETRIES):
+    """Download a URL to a file with retries."""
+    for attempt in range(retries):
+        try:
+            r = requests.get(url, timeout=30)
+            if r.status_code == 200 and len(r.content) > 500:
+                path.write_bytes(r.content)
+                return True
+            if r.status_code == 429:
+                wait = 2 ** (attempt + 1)
+                time.sleep(wait)
+                continue
+        except (requests.RequestException, ConnectionError):
+            if attempt < retries - 1:
+                time.sleep(2)
+    return False
+
+
+def get_metadata(lat, lng):
+    """Get context metadata. Returns dict, never fails."""
+    try:
+        point = ee.Geometry.Point([lng, lat])
+        info = ee.Dictionary({
+            "elevation": ELEVATION.reduceRegion(ee.Reducer.mean(), point, 30).get("elevation"),
+            "rainfall": RAINFALL.reduceRegion(ee.Reducer.mean(), point, 5000).get("precipitation"),
+            "dynamic_world": DW.reduceRegion(ee.Reducer.mode(), point, 10).get("label"),
+            "worldcover": WORLDCOVER.reduceRegion(ee.Reducer.mode(), point, 10).get("Map"),
+        }).getInfo()
+        return info
+    except Exception:
+        return {}
+
+
+def export_tile(lat, lng, tile_id, out_dir, label=None, cocoa_prob_val=None):
+    """Export a single tile. Returns True on success."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    rgb_path = out_dir / f"{tile_id}_rgb.png"
+    nir_path = out_dir / f"{tile_id}_nir.png"
+    meta_path = out_dir / f"{tile_id}_meta.json"
+
+    # Skip if already exported
+    if rgb_path.exists() and nir_path.exists() and meta_path.exists():
+        return True
+
     point = ee.Geometry.Point([lng, lat])
     tile_geom = point.buffer(TILE_EXTENT / 2).bounds()
 
-    s2 = get_s2_composite(tile_geom)
-
-    # RGB thumbnail URL
-    rgb_url = s2.getThumbURL({
-        "bands": ["B4", "B3", "B2"],
-        "min": 0,
-        "max": 3000,
-        "dimensions": TILE_SIZE,
-        "region": tile_geom,
-        "format": "png",
-    })
-
-    # NIR-R-G false color
-    nir_url = s2.getThumbURL({
-        "bands": ["B8", "B4", "B3"],
-        "min": 0,
-        "max": 5000,
-        "dimensions": TILE_SIZE,
-        "region": tile_geom,
-        "format": "png",
-    })
-
-    # Download images
-    tile_dir = OUTPUT_DIR / region_name
-    tile_dir.mkdir(exist_ok=True)
-
-    rgb_path = tile_dir / f"{tile_id}_rgb.png"
-    nir_path = tile_dir / f"{tile_id}_nir.png"
-    meta_path = tile_dir / f"{tile_id}_meta.json"
-
-    # Download RGB
-    r = requests.get(rgb_url)
-    if r.status_code == 200:
-        rgb_path.write_bytes(r.content)
-    else:
-        print(f"  Failed to download RGB for {tile_id}: {r.status_code}")
+    try:
+        rgb_url = get_thumb_url(S2, ["B4", "B3", "B2"], 0, 3000, tile_geom)
+        nir_url = get_thumb_url(S2, ["B8", "B4", "B3"], 0, 5000, tile_geom)
+    except Exception as e:
+        print(f"    EE error for {tile_id}: {e}")
         return False
 
-    # Download NIR
-    r = requests.get(nir_url)
-    if r.status_code == 200:
-        nir_path.write_bytes(r.content)
+    if not download_with_retry(rgb_url, rgb_path):
+        return False
+    download_with_retry(nir_url, nir_path)
 
-    # Get metadata
-    try:
-        meta = get_tile_metadata(lat, lng)
-    except Exception as e:
-        meta = {"error": str(e)}
-
+    meta = get_metadata(lat, lng)
     meta.update({
         "tile_id": tile_id,
         "lat": lat,
         "lng": lng,
-        "region": region_name,
-        "label": label,  # cocoa / not_cocoa / None (unlabeled)
+        "label": label,
     })
-
+    if cocoa_prob_val is not None:
+        meta["cocoa_probability"] = cocoa_prob_val
     meta_path.write_text(json.dumps(meta, indent=2))
     return True
 
 
-def export_ghana_cocoa_tiles(n_tiles=100):
-    """Export labeled tiles from Ghana cocoa regions."""
-    print(f"\n=== Exporting {n_tiles} Ghana cocoa tiles ===")
+def load_progress():
+    """Load set of completed tile IDs."""
+    if PROGRESS_FILE.exists():
+        return set(json.loads(PROGRESS_FILE.read_text()))
+    return set()
 
-    # Ghana cocoa belt
-    ghana_cocoa_region = ee.Geometry.Rectangle([-3.5, 5.5, -0.5, 8.0])
 
-    # Get points where cocoa probability > 0.7
-    cocoa_mask = cocoa_prob.gt(0.7)
-    # Sample random points from cocoa areas
-    cocoa_points = cocoa_mask.selfMask().sample(
-        region=ghana_cocoa_region,
-        scale=TILE_EXTENT,
-        numPixels=n_tiles,
-        geometries=True,
-    ).getInfo()
+def save_progress(completed):
+    """Save set of completed tile IDs."""
+    PROGRESS_FILE.write_text(json.dumps(sorted(completed)))
+
+
+def export_batch(tiles, out_dir, desc):
+    """Export a batch of tiles with progress tracking and parallelism."""
+    completed = load_progress()
+    remaining = [(t, tid) for t, tid in tiles if tid not in completed]
+
+    print(f"\n=== {desc} ===")
+    print(f"  Total: {len(tiles)}, Already done: {len(tiles) - len(remaining)}, Remaining: {len(remaining)}")
 
     exported = 0
-    for i, feat in enumerate(cocoa_points["features"]):
-        if exported >= n_tiles:
-            break
-        coords = feat["geometry"]["coordinates"]
-        lng, lat = coords[0], coords[1]
-        tile_id = f"ghana_cocoa_{i:04d}"
-        print(f"  Exporting {tile_id} ({lat:.3f}, {lng:.3f})...")
-        if export_tile(lat, lng, tile_id, "ghana_cocoa", label="cocoa"):
-            exported += 1
+    failed = 0
 
-    print(f"  Exported {exported} Ghana cocoa tiles")
+    for i, ((lat, lng, label, prob), tile_id) in enumerate(remaining):
+        if i > 0 and i % 50 == 0:
+            print(f"  Progress: {i}/{len(remaining)} ({exported} exported, {failed} failed)")
+            save_progress(completed)
+
+        success = export_tile(lat, lng, tile_id, out_dir, label=label, cocoa_prob_val=prob)
+        if success:
+            exported += 1
+            completed.add(tile_id)
+        else:
+            failed += 1
+
+        # Rate limit: ~2 requests/sec to EE
+        if i % 10 == 9:
+            time.sleep(1)
+
+    save_progress(completed)
+    print(f"  Done: {exported} exported, {failed} failed")
     return exported
 
 
-def export_ghana_nococoa_tiles(n_tiles=100):
-    """Export labeled non-cocoa tiles from Ghana."""
-    print(f"\n=== Exporting {n_tiles} Ghana non-cocoa tiles ===")
+def build_ghana_cocoa_tiles(n=500, spacing_km=3):
+    """Build tile list from Ghana cocoa regions using grid + FDP filter."""
+    # Ghana cocoa belt bounding boxes
+    bboxes = [
+        (-3.2, 5.5, -1.0, 7.5),  # Western/Ashanti
+        (-1.0, 6.0, 0.5, 7.5),   # Eastern/Ashanti
+    ]
+    all_points = []
+    for bbox in bboxes:
+        all_points.extend(generate_grid(bbox, spacing_km))
 
-    ghana_region = ee.Geometry.Rectangle([-3.5, 5.5, -0.5, 8.0])
+    print(f"  Ghana grid: {len(all_points)} candidate points")
 
-    # Points where cocoa probability < 0.2 but still in humid zone
-    nococoa_mask = cocoa_prob.lt(0.2)
-    rain_mask = rainfall.gt(1200)  # humid zone only
-    combined = nococoa_mask.And(rain_mask).selfMask()
+    # Filter by FDP cocoa probability > 0.7 using batch getInfo
+    # Process in chunks to avoid EE timeout
+    cocoa_tiles = []
+    chunk_size = 100
+    for chunk_start in range(0, len(all_points), chunk_size):
+        chunk = all_points[chunk_start:chunk_start + chunk_size]
+        try:
+            points_fc = ee.FeatureCollection([
+                ee.Feature(ee.Geometry.Point([lng, lat]), {"lat": lat, "lng": lng})
+                for lat, lng in chunk
+            ])
+            sampled = COCOA_PROB.reduceRegions(
+                collection=points_fc,
+                reducer=ee.Reducer.mean(),
+                scale=100,
+            ).getInfo()
 
-    nococoa_points = combined.sample(
-        region=ghana_region,
-        scale=TILE_EXTENT,
-        numPixels=n_tiles,
-        geometries=True,
-    ).getInfo()
+            for feat in sampled["features"]:
+                prob = feat["properties"].get("mean")
+                if prob is not None and prob > 0.7:
+                    lat = feat["properties"]["lat"]
+                    lng = feat["properties"]["lng"]
+                    cocoa_tiles.append((lat, lng, "cocoa", round(prob, 3)))
+                    if len(cocoa_tiles) >= n:
+                        break
+        except Exception as e:
+            print(f"    Chunk error: {e}")
+            continue
 
-    exported = 0
-    for i, feat in enumerate(nococoa_points["features"]):
-        if exported >= n_tiles:
+        if len(cocoa_tiles) >= n:
             break
-        coords = feat["geometry"]["coordinates"]
-        lng, lat = coords[0], coords[1]
-        tile_id = f"ghana_nococoa_{i:04d}"
-        print(f"  Exporting {tile_id} ({lat:.3f}, {lng:.3f})...")
-        if export_tile(lat, lng, tile_id, "ghana_nococoa", label="not_cocoa"):
-            exported += 1
 
-    print(f"  Exported {exported} Ghana non-cocoa tiles")
-    return exported
+    print(f"  Found {len(cocoa_tiles)} cocoa tiles (prob > 0.7)")
+    return cocoa_tiles[:n]
 
 
-def export_nigeria_target_tiles(n_tiles=200):
-    """Export unlabeled tiles from Nigeria's cocoa belt."""
-    print(f"\n=== Exporting {n_tiles} Nigeria cocoa belt tiles ===")
+def build_ghana_nococoa_tiles(n=500, spacing_km=4):
+    """Build non-cocoa tile list from Ghana humid zone."""
+    bboxes = [
+        (-3.2, 5.5, -1.0, 7.5),
+        (-1.0, 6.0, 0.5, 7.5),
+    ]
+    all_points = []
+    for bbox in bboxes:
+        all_points.extend(generate_grid(bbox, spacing_km))
 
-    # Nigeria cocoa belt states
-    nigeria_cocoa_belt = ee.Geometry.MultiPolygon([
+    print(f"  Ghana non-cocoa grid: {len(all_points)} candidate points")
+
+    nococoa_tiles = []
+    chunk_size = 100
+    for chunk_start in range(0, len(all_points), chunk_size):
+        chunk = all_points[chunk_start:chunk_start + chunk_size]
+        try:
+            points_fc = ee.FeatureCollection([
+                ee.Feature(ee.Geometry.Point([lng, lat]), {"lat": lat, "lng": lng})
+                for lat, lng in chunk
+            ])
+            sampled = COCOA_PROB.reduceRegions(
+                collection=points_fc,
+                reducer=ee.Reducer.mean(),
+                scale=100,
+            ).getInfo()
+
+            for feat in sampled["features"]:
+                prob = feat["properties"].get("mean")
+                if prob is not None and prob < 0.2:
+                    lat = feat["properties"]["lat"]
+                    lng = feat["properties"]["lng"]
+                    nococoa_tiles.append((lat, lng, "not_cocoa", round(prob, 3)))
+                    if len(nococoa_tiles) >= n:
+                        break
+        except Exception as e:
+            print(f"    Chunk error: {e}")
+            continue
+
+        if len(nococoa_tiles) >= n:
+            break
+
+    print(f"  Found {len(nococoa_tiles)} non-cocoa tiles (prob < 0.2)")
+    return nococoa_tiles[:n]
+
+
+def build_nigeria_target_tiles(spacing_km=5):
+    """Build grid of tiles across Nigeria's cocoa belt."""
+    bboxes = [
         # Ondo/Osun/Ogun/Ekiti (core SW cocoa)
-        [[[4.0, 6.8], [5.5, 6.8], [5.5, 8.0], [4.0, 8.0], [4.0, 6.8]]],
-        # Cross River/Edo/Abia (SE cocoa)
-        [[[5.5, 6.0], [9.0, 6.0], [9.0, 7.5], [5.5, 7.5], [5.5, 6.0]]],
-    ])
+        (4.0, 6.8, 5.8, 8.2),
+        # Edo/Delta
+        (5.0, 6.2, 6.5, 7.5),
+        # Cross River/Akwa Ibom
+        (7.5, 5.5, 9.5, 7.0),
+    ]
+    all_points = []
+    for bbox in bboxes:
+        all_points.extend(generate_grid(bbox, spacing_km))
 
-    points = generate_grid_points(nigeria_cocoa_belt, 5000)  # 5km grid
-    print(f"  Generated {len(points)} grid points")
-
-    exported = 0
-    for i, (lat, lng) in enumerate(points):
-        if exported >= n_tiles:
-            break
-
-        # Check if point is on land (has WorldCover data)
-        tile_id = f"nigeria_target_{i:04d}"
-        print(f"  Exporting {tile_id} ({lat:.3f}, {lng:.3f})...")
-        if export_tile(lat, lng, tile_id, "nigeria_target", label=None):
-            exported += 1
-
-    print(f"  Exported {exported} Nigeria target tiles")
-    return exported
+    tiles = [(lat, lng, None, None) for lat, lng in all_points]
+    print(f"  Nigeria target: {len(tiles)} tiles at {spacing_km}km spacing")
+    return tiles
 
 
-def export_nigeria_control_tiles(n_tiles=50):
-    """Export negative control tiles from Nigeria's savanna (no cocoa)."""
-    print(f"\n=== Exporting {n_tiles} Nigeria control tiles (savanna) ===")
+def build_nigeria_control_tiles(n=500, spacing_km=10):
+    """Grid of tiles from northern Nigeria savanna."""
+    bboxes = [
+        (3.0, 10.0, 14.0, 13.5),  # northern savanna belt
+    ]
+    all_points = []
+    for bbox in bboxes:
+        all_points.extend(generate_grid(bbox, spacing_km))
 
-    # Kano/Borno — dry savanna, definitely no cocoa
-    savanna_region = ee.Geometry.Rectangle([7.0, 11.0, 13.0, 13.0])
-
-    points = generate_grid_points(savanna_region, 20000)  # 20km grid
-    print(f"  Generated {len(points)} grid points")
-
-    exported = 0
-    for i, (lat, lng) in enumerate(points):
-        if exported >= n_tiles:
-            break
-        tile_id = f"nigeria_control_{i:04d}"
-        print(f"  Exporting {tile_id} ({lat:.3f}, {lng:.3f})...")
-        if export_tile(lat, lng, tile_id, "nigeria_control", label="not_cocoa"):
-            exported += 1
-
-    print(f"  Exported {exported} Nigeria control tiles")
-    return exported
+    tiles = [(lat, lng, "not_cocoa", None) for lat, lng in all_points[:n]]
+    print(f"  Nigeria control: {len(tiles)} tiles at {spacing_km}km spacing")
+    return tiles
 
 
 if __name__ == "__main__":
-    print("Cocoa Tile Export Pipeline")
-    print("=" * 50)
+    test_mode = "--test" in sys.argv
 
-    # Start with a small test batch
-    TEST_MODE = True
-    if TEST_MODE:
-        print("\n*** TEST MODE: exporting 10 tiles per category ***\n")
-        n_cocoa = 10
-        n_nococoa = 10
-        n_target = 20
-        n_control = 5
+    print(f"\nCocoa Tile Export Pipeline {'(TEST MODE)' if test_mode else '(FULL)'}")
+    print("=" * 60)
+
+    if test_mode:
+        max_cocoa = 20
+        max_nococoa = 20
+        max_control = 10
+        target_spacing = 15
     else:
-        n_cocoa = 500
-        n_nococoa = 500
-        n_target = 2000
-        n_control = 500
+        max_cocoa = 500
+        max_nococoa = 500
+        max_control = 500
+        target_spacing = 5
 
     total = 0
-    total += export_ghana_cocoa_tiles(n_cocoa)
-    total += export_ghana_nococoa_tiles(n_nococoa)
-    total += export_nigeria_target_tiles(n_target)
-    total += export_nigeria_control_tiles(n_control)
 
-    print(f"\n{'=' * 50}")
+    # Ghana cocoa (labeled positive)
+    print("\nBuilding Ghana cocoa tile list...")
+    ghana_cocoa = build_ghana_cocoa_tiles(max_cocoa)
+    tiles_with_ids = [
+        ((lat, lng, label, prob), f"ghana_cocoa_{i:04d}")
+        for i, (lat, lng, label, prob) in enumerate(ghana_cocoa)
+    ]
+    total += export_batch(tiles_with_ids, OUTPUT_DIR / "ghana_cocoa", f"Ghana Cocoa ({len(ghana_cocoa)} tiles)")
+
+    # Ghana non-cocoa (labeled negative)
+    print("\nBuilding Ghana non-cocoa tile list...")
+    ghana_nococoa = build_ghana_nococoa_tiles(max_nococoa)
+    tiles_with_ids = [
+        ((lat, lng, label, prob), f"ghana_nococoa_{i:04d}")
+        for i, (lat, lng, label, prob) in enumerate(ghana_nococoa)
+    ]
+    total += export_batch(tiles_with_ids, OUTPUT_DIR / "ghana_nococoa", f"Ghana Non-Cocoa ({len(ghana_nococoa)} tiles)")
+
+    # Nigeria target (unlabeled)
+    print("\nBuilding Nigeria target tile list...")
+    nigeria_target = build_nigeria_target_tiles(target_spacing)
+    tiles_with_ids = [
+        ((lat, lng, label, prob), f"nigeria_target_{i:04d}")
+        for i, (lat, lng, label, prob) in enumerate(nigeria_target)
+    ]
+    total += export_batch(tiles_with_ids, OUTPUT_DIR / "nigeria_target_grid", f"Nigeria Target ({len(nigeria_target)} tiles)")
+
+    # Nigeria control (labeled negative)
+    print("\nBuilding Nigeria control tile list...")
+    nigeria_control = build_nigeria_control_tiles(max_control)
+    tiles_with_ids = [
+        ((lat, lng, label, prob), f"nigeria_control_{i:04d}")
+        for i, (lat, lng, label, prob) in enumerate(nigeria_control)
+    ]
+    total += export_batch(tiles_with_ids, OUTPUT_DIR / "nigeria_control", f"Nigeria Control ({len(nigeria_control)} tiles)")
+
+    print(f"\n{'=' * 60}")
     print(f"Total tiles exported: {total}")
-    print(f"Output directory: {OUTPUT_DIR.absolute()}")
-    print(f"\nNext step: run Gemini classification on exported tiles")
+    print(f"Output: {OUTPUT_DIR.absolute()}")
+
+    # Summary
+    for d in OUTPUT_DIR.iterdir():
+        if d.is_dir():
+            pngs = len(list(d.glob("*_rgb.png")))
+            print(f"  {d.name}: {pngs} tiles")
