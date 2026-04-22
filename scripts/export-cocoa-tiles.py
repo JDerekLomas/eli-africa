@@ -261,12 +261,12 @@ def export_nigeria_target_tiles(n_tiles=200):
     """Export unlabeled tiles from Nigeria's cocoa belt."""
     print(f"\n=== Exporting {n_tiles} Nigeria cocoa belt tiles ===")
 
-    # Nigeria southwest cocoa belt (Ondo, Osun, Ogun, Ekiti, Cross River)
+    # Nigeria cocoa belt states
     nigeria_cocoa_belt = ee.Geometry.MultiPolygon([
-        # Southwest cluster (Ondo/Osun/Ogun/Ekiti)
-        [[[3.5, 6.5], [5.5, 6.5], [5.5, 8.0], [3.5, 8.0], [3.5, 6.5]]],
-        # Southeast cluster (Cross River/Edo/Abia)
-        [[[5.5, 5.5], [9.0, 5.5], [9.0, 7.0], [5.5, 7.0], [5.5, 5.5]]],
+        # Ondo/Osun/Ogun/Ekiti (core SW cocoa)
+        [[[4.0, 6.8], [5.5, 6.8], [5.5, 8.0], [4.0, 8.0], [4.0, 6.8]]],
+        # Cross River/Edo/Abia (SE cocoa)
+        [[[5.5, 6.0], [9.0, 6.0], [9.0, 7.5], [5.5, 7.5], [5.5, 6.0]]],
     ])
 
     points = generate_grid_points(nigeria_cocoa_belt, 5000)  # 5km grid

@@ -2,3 +2,4 @@ sa-key.json
 .venv/
 __pycache__/
 *.html
+tiles/
