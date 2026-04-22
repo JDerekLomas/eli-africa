@@ -1,0 +1,14 @@
+{
+  "name": "osun_ife",
+  "description": "Osun State - Ife cocoa region",
+  "lat": 7.45,
+  "lng": 4.5,
+  "images": {
+    "rgb": "/spots/osun_ife_rgb.png",
+    "nir": "/spots/osun_ife_nir.png",
+    "dw": "/spots/osun_ife_dw.png",
+    "wc": "/spots/osun_ife_wc.png",
+    "wide_rgb": "/spots/osun_ife_wide_rgb.png",
+    "wide_dw": "/spots/osun_ife_wide_dw.png"
+  }
+}

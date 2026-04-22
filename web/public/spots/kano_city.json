@@ -1,0 +1,14 @@
+{
+  "name": "kano_city",
+  "description": "Kano - largest northern city",
+  "lat": 12.0,
+  "lng": 8.52,
+  "images": {
+    "rgb": "/spots/kano_city_rgb.png",
+    "nir": "/spots/kano_city_nir.png",
+    "dw": "/spots/kano_city_dw.png",
+    "wc": "/spots/kano_city_wc.png",
+    "wide_rgb": "/spots/kano_city_wide_rgb.png",
+    "wide_dw": "/spots/kano_city_wide_dw.png"
+  }
+}

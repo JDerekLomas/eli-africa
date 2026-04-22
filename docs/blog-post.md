@@ -1,4 +1,4 @@
-# Mapping Nigeria's Invisible Cocoa Farms with AI and Satellite Imagery
+ # Mapping Nigeria's Invisible Cocoa Farms with AI and Satellite Imagery
 
 *Using Gemini and Sentinel-2 to extend cocoa detection from Ghana to Nigeria — where no ground-truth map exists.*
 

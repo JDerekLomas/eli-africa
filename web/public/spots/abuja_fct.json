@@ -1,0 +1,14 @@
+{
+  "name": "abuja_fct",
+  "description": "Abuja - Federal Capital Territory",
+  "lat": 9.06,
+  "lng": 7.49,
+  "images": {
+    "rgb": "/spots/abuja_fct_rgb.png",
+    "nir": "/spots/abuja_fct_nir.png",
+    "dw": "/spots/abuja_fct_dw.png",
+    "wc": "/spots/abuja_fct_wc.png",
+    "wide_rgb": "/spots/abuja_fct_wide_rgb.png",
+    "wide_dw": "/spots/abuja_fct_wide_dw.png"
+  }
+}

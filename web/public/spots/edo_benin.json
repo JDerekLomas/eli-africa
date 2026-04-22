@@ -1,0 +1,14 @@
+{
+  "name": "edo_benin",
+  "description": "Edo State - Benin City peri-urban",
+  "lat": 6.75,
+  "lng": 5.6,
+  "images": {
+    "rgb": "/spots/edo_benin_rgb.png",
+    "nir": "/spots/edo_benin_nir.png",
+    "dw": "/spots/edo_benin_dw.png",
+    "wc": "/spots/edo_benin_wc.png",
+    "wide_rgb": "/spots/edo_benin_wide_rgb.png",
+    "wide_dw": "/spots/edo_benin_wide_dw.png"
+  }
+}

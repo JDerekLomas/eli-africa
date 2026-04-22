@@ -1,0 +1,14 @@
+{
+  "name": "crossriver_ikom",
+  "description": "Cross River - Ikom cocoa zone",
+  "lat": 5.95,
+  "lng": 8.35,
+  "images": {
+    "rgb": "/spots/crossriver_ikom_rgb.png",
+    "nir": "/spots/crossriver_ikom_nir.png",
+    "dw": "/spots/crossriver_ikom_dw.png",
+    "wc": "/spots/crossriver_ikom_wc.png",
+    "wide_rgb": "/spots/crossriver_ikom_wide_rgb.png",
+    "wide_dw": "/spots/crossriver_ikom_wide_dw.png"
+  }
+}

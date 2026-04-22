@@ -1,0 +1,14 @@
+{
+  "name": "ondo_idanre",
+  "description": "Ondo State - Idanre cocoa hills",
+  "lat": 7.25,
+  "lng": 4.85,
+  "images": {
+    "rgb": "/spots/ondo_idanre_rgb.png",
+    "nir": "/spots/ondo_idanre_nir.png",
+    "dw": "/spots/ondo_idanre_dw.png",
+    "wc": "/spots/ondo_idanre_wc.png",
+    "wide_rgb": "/spots/ondo_idanre_wide_rgb.png",
+    "wide_dw": "/spots/ondo_idanre_wide_dw.png"
+  }
+}

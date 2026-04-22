@@ -1,0 +1,14 @@
+{
+  "name": "bauchi_farms",
+  "description": "Bauchi - guinea savanna agriculture",
+  "lat": 10.3,
+  "lng": 9.8,
+  "images": {
+    "rgb": "/spots/bauchi_farms_rgb.png",
+    "nir": "/spots/bauchi_farms_nir.png",
+    "dw": "/spots/bauchi_farms_dw.png",
+    "wc": "/spots/bauchi_farms_wc.png",
+    "wide_rgb": "/spots/bauchi_farms_wide_rgb.png",
+    "wide_dw": "/spots/bauchi_farms_wide_dw.png"
+  }
+}

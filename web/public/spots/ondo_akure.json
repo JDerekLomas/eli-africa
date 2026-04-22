@@ -1,0 +1,14 @@
+{
+  "name": "ondo_akure",
+  "description": "Ondo State - Akure cocoa heartland",
+  "lat": 7.17,
+  "lng": 5.05,
+  "images": {
+    "rgb": "/spots/ondo_akure_rgb.png",
+    "nir": "/spots/ondo_akure_nir.png",
+    "dw": "/spots/ondo_akure_dw.png",
+    "wc": "/spots/ondo_akure_wc.png",
+    "wide_rgb": "/spots/ondo_akure_wide_rgb.png",
+    "wide_dw": "/spots/ondo_akure_wide_dw.png"
+  }
+}

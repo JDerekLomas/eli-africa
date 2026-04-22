@@ -1,0 +1,14 @@
+{
+  "name": "portharcourt",
+  "description": "Port Harcourt - Niger Delta urban",
+  "lat": 4.77,
+  "lng": 7.01,
+  "images": {
+    "rgb": "/spots/portharcourt_rgb.png",
+    "nir": "/spots/portharcourt_nir.png",
+    "dw": "/spots/portharcourt_dw.png",
+    "wc": "/spots/portharcourt_wc.png",
+    "wide_rgb": "/spots/portharcourt_wide_rgb.png",
+    "wide_dw": "/spots/portharcourt_wide_dw.png"
+  }
+}

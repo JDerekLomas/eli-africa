@@ -1,0 +1,14 @@
+{
+  "name": "kaduna_farms",
+  "description": "Kaduna - savanna farmland",
+  "lat": 11.5,
+  "lng": 7.5,
+  "images": {
+    "rgb": "/spots/kaduna_farms_rgb.png",
+    "nir": "/spots/kaduna_farms_nir.png",
+    "dw": "/spots/kaduna_farms_dw.png",
+    "wc": "/spots/kaduna_farms_wc.png",
+    "wide_rgb": "/spots/kaduna_farms_wide_rgb.png",
+    "wide_dw": "/spots/kaduna_farms_wide_dw.png"
+  }
+}
