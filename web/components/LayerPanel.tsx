@@ -14,6 +14,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   agriculture: "Agriculture",
   climate: "Climate",
   population: "Demographics",
+  imagery: "Satellite Imagery",
 };
 
 function GradientSwatch({ palette }: { palette: string[] }) {

@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Africa Agricultural Land Use Explorer",
-  description: "Food security & climate adaptation map explorer",
+  title: "Nigeria Agricultural Land Use Explorer",
+  description: "Food security & climate adaptation map explorer — Nigeria",
 };
 
 export default function RootLayout({

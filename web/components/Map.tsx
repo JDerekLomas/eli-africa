@@ -10,13 +10,39 @@ interface MapProps {
   onMapClick?: (lat: number, lng: number) => void;
 }
 
-// Client-side tile URL cache
+// Client-side tile URL cache — preloaded on mount
 const urlCache = new Map<string, string>();
+let preloading = false;
+let preloadPromise: Promise<void> | null = null;
+
+function preloadAllTileUrls(): Promise<void> {
+  if (preloadPromise) return preloadPromise;
+  preloading = true;
+  preloadPromise = fetch("/api/ee-preload")
+    .then((r) => r.json())
+    .then((data) => {
+      if (data.tiles) {
+        Object.entries(data.tiles).forEach(([id, url]) => {
+          urlCache.set(id, url as string);
+        });
+      }
+      preloading = false;
+    })
+    .catch((err) => {
+      console.error("Preload failed:", err);
+      preloading = false;
+    });
+  return preloadPromise;
+}
 
 async function fetchTileUrl(layerId: string): Promise<string> {
+  // Wait for preload if in progress
+  if (preloading && preloadPromise) await preloadPromise;
+
   const cached = urlCache.get(layerId);
   if (cached) return cached;
 
+  // Fallback: fetch individually
   const res = await fetch("/api/ee-tiles", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -36,14 +62,23 @@ export default function EEMap({ activeLayers, layerOpacity, onMapClick }: MapPro
   const onMapClickRef = useRef(onMapClick);
   onMapClickRef.current = onMapClick;
 
-  // Initialize map once
+  // Preload all tile URLs on mount
+  useEffect(() => {
+    preloadAllTileUrls();
+  }, []);
+
+  // Initialize map
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
     const map = L.map(containerRef.current, {
-      center: [2, 20],
-      zoom: 4,
+      center: [9.05, 7.49],
+      zoom: 6,
       zoomControl: false,
+      // Smoother zooming
+      zoomAnimation: true,
+      fadeAnimation: true,
+      markerZoomAnimation: true,
     });
 
     // Base map without labels
@@ -52,7 +87,7 @@ export default function EEMap({ activeLayers, layerOpacity, onMapClick }: MapPro
       { attribution: '&copy; <a href="https://carto.com/">CARTO</a>', maxZoom: 18 }
     ).addTo(map);
 
-    // Labels layer on top of everything (added to a high-z pane)
+    // Labels on top
     map.createPane("labels");
     map.getPane("labels")!.style.zIndex = "650";
     map.getPane("labels")!.style.pointerEvents = "none";
@@ -63,6 +98,7 @@ export default function EEMap({ activeLayers, layerOpacity, onMapClick }: MapPro
 
     L.control.zoom({ position: "topright" }).addTo(map);
 
+    const markerRef = { current: null as L.CircleMarker | null };
     map.on("click", (e: L.LeafletMouseEvent) => {
       if (markerRef.current) map.removeLayer(markerRef.current);
       markerRef.current = L.circleMarker([e.latlng.lat, e.latlng.lng], {
@@ -71,15 +107,13 @@ export default function EEMap({ activeLayers, layerOpacity, onMapClick }: MapPro
       onMapClickRef.current?.(e.latlng.lat, e.latlng.lng);
     });
 
-    const markerRef = { current: null as L.CircleMarker | null };
-
     mapRef.current = map;
     setMapReady(true);
 
     return () => { map.remove(); mapRef.current = null; setMapReady(false); };
   }, []);
 
-  // Listen for custom tile events (vulnerability, site-selection)
+  // Custom tile events (vulnerability, site-selection)
   useEffect(() => {
     const handler = (e: Event) => {
       const { id, url, opacity } = (e as CustomEvent).detail;
@@ -94,7 +128,7 @@ export default function EEMap({ activeLayers, layerOpacity, onMapClick }: MapPro
     return () => window.removeEventListener("custom-tile", handler);
   }, [mapReady]);
 
-  // Sync layers with activeLayers state
+  // Sync layers — toggles are instant because URLs are preloaded
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     const map = mapRef.current;
@@ -103,7 +137,6 @@ export default function EEMap({ activeLayers, layerOpacity, onMapClick }: MapPro
       if (layerId === "vulnerability-index" || layerId === "site-selection") return;
 
       if (visible && !tileLayersRef.current[layerId]) {
-        // Fetch and add
         fetchTileUrl(layerId)
           .then((tileUrl) => {
             if (!mapRef.current || !activeLayers[layerId]) return;
@@ -120,9 +153,9 @@ export default function EEMap({ activeLayers, layerOpacity, onMapClick }: MapPro
         delete tileLayersRef.current[layerId];
       }
     });
-  }, [activeLayers, mapReady]); // intentionally exclude layerOpacity to avoid re-fetching
+  }, [activeLayers, mapReady]);
 
-  // Opacity updates
+  // Opacity
   useEffect(() => {
     Object.entries(layerOpacity).forEach(([layerId, opacity]) => {
       const layer = tileLayersRef.current[layerId];

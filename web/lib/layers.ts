@@ -6,7 +6,7 @@ export interface LayerDef {
   min: number;
   max: number;
   defaultVisible: boolean;
-  category: "agriculture" | "climate" | "population";
+  category: "agriculture" | "climate" | "population" | "imagery";
 }
 
 export const LAYERS: LayerDef[] = [
@@ -140,6 +140,26 @@ export const LAYERS: LayerDef[] = [
     defaultVisible: false,
     category: "agriculture",
   },
+  {
+    id: "sentinel2",
+    name: "Satellite Imagery (Sentinel-2)",
+    description: "True color 10m — zoom in to see individual farm plots",
+    palette: [],
+    min: 0,
+    max: 3000,
+    defaultVisible: false,
+    category: "imagery",
+  },
+  {
+    id: "dynamic-world",
+    name: "Land Use Classification",
+    description: "Google Dynamic World — 10m near-real-time land use (9 classes)",
+    palette: ["#419bdf", "#397d49", "#88b053", "#7a87c6", "#e49635", "#dfc35a", "#c4281b", "#a59b8f", "#b39fe1"],
+    min: 0,
+    max: 8,
+    defaultVisible: false,
+    category: "imagery",
+  },
 ];
 
 // No clip — let EE render globally, much faster. Map is zoomed to Africa anyway.
@@ -254,6 +274,29 @@ export function buildEEImage(ee: any, layerId: string) {
       // Merge: FDP cocoa + Nigeria suitability estimate
       const combined = ee.ImageCollection([cocoa.selfMask(), nigeriaCocoa]).mosaic();
       return { image: combined, visParams: { palette: ["#ffffcc", "#d9a066", "#8B4513"], min: 0.3, max: 1 } };
+    }
+    case "sentinel2": {
+      const s2 = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+        .filterDate("2024-01-01", "2024-12-31")
+        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 20))
+        .select(["B4", "B3", "B2"])
+        .median();
+      return { image: s2, visParams: { bands: ["B4", "B3", "B2"], min: 0, max: 3000 } };
+    }
+    case "dynamic-world": {
+      const dw = ee.ImageCollection("GOOGLE/DYNAMICWORLD/V1")
+        .filterDate("2024-01-01", "2024-12-31")
+        .select("label")
+        .mode();
+      // 0=water, 1=trees, 2=grass, 3=flooded_veg, 4=crops, 5=shrub, 6=built, 7=bare, 8=snow
+      return {
+        image: dw,
+        visParams: {
+          min: 0,
+          max: 8,
+          palette: ["#419bdf", "#397d49", "#88b053", "#7a87c6", "#e49635", "#dfc35a", "#c4281b", "#a59b8f", "#b39fe1"],
+        },
+      };
     }
     default:
       throw new Error(`Unknown layer: ${layerId}`);

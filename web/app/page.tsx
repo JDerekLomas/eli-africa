@@ -117,7 +117,7 @@ export default function Home() {
         {/* Header */}
         <div className="p-5 border-b border-gray-700">
           <h1 className="text-lg font-bold leading-tight">
-            Africa Agricultural Land Use
+            Nigeria Agricultural Land Use
           </h1>
           <p className="text-xs text-gray-400 mt-1">
             Food Security & Climate Adaptation Explorer
