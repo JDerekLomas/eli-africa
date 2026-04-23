@@ -1,0 +1,50 @@
+{
+  "source": "Etaware (2022) Frontiers in Agronomy, doi:10.3389/fagro.2022.731019, Table 2",
+  "description": "GPS coordinates of cocoa farm locations in 18 Nigerian states with production data",
+  "farms": [
+    {"state": "Abia", "lga": "Ikwuano", "community": "Ikwuano", "lat": 5.4093, "lng": 7.5897, "tons": "Below 10,000", "pct": "<5"},
+    {"state": "Adamawa", "lga": "Toungo", "community": "Toungo", "lat": 8.1177, "lng": 12.0441, "tons": "Below 10,000", "pct": "<5"},
+    {"state": "Akwa Ibom", "lga": "Ini", "community": "Odoro Ikpe", "lat": 5.2826, "lng": 7.7634, "tons": "Below 10,000", "pct": "<5"},
+    {"state": "Cross River", "lga": "Ikom", "community": "Ikom", "lat": 5.9624, "lng": 8.7082, "tons": 59087, "pct": "18"},
+    {"state": "Delta", "lga": "Aniocha South", "community": "Nsukwa", "lat": 6.0167, "lng": 6.4500, "tons": "Below 10,000", "pct": "<5"},
+    {"state": "Ebonyi", "lga": "Afikpo South", "community": "Edda", "lat": 5.7839, "lng": 7.8368, "tons": "Below 10,000", "pct": "<5"},
+    {"state": "Edo", "lga": "Owan West", "community": "Sabongida-Ora", "lat": 6.8988, "lng": 5.9372, "tons": "Below 10,000", "pct": "<5"},
+    {"state": "Ekiti", "lga": "Ikere-Ekiti", "community": "Atoka", "lat": 7.4991, "lng": 5.2319, "tons": "Below 10,000", "pct": "<5"},
+    {"state": "Imo", "lga": "Owerri", "community": "New Owerri", "lat": 5.4999, "lng": 6.9853, "tons": "Below 10,000", "pct": "<5"},
+    {"state": "Kogi", "lga": "Lokoja", "community": "Lokoja", "lat": 7.8023, "lng": 6.7333, "tons": "Below 10,000", "pct": "<5"},
+    {"state": "Kwara", "lga": "Isin", "community": "Oke Onigbin", "lat": 8.2218, "lng": 4.9987, "tons": "Below 10,000", "pct": "<5"},
+    {"state": "Lagos", "lga": "Ikeja", "community": "Agege", "lat": 6.6154, "lng": 3.3238, "tons": 0, "pct": "0"},
+    {"state": "Ogun", "lga": "Odeda", "community": "Odeda", "lat": 7.2328, "lng": 3.5281, "tons": 29544, "pct": "9"},
+    {"state": "Ondo", "lga": "Ifedore", "community": "Owena", "lat": 7.1961, "lng": 5.0195, "tons": 78783, "pct": "24"},
+    {"state": "Osun", "lga": "Ife East", "community": "Iyanfoworogi", "lat": 7.3653, "lng": 4.8164, "tons": 72217, "pct": "22"},
+    {"state": "Oyo", "lga": "Ido (Ibadan)", "community": "daagi logba", "lat": 7.3900, "lng": 3.7537, "tons": 32826, "pct": "10"},
+    {"state": "Rivers", "lga": "Bonny", "community": "Bonny", "lat": 4.4333, "lng": 7.1667, "tons": "Infinitesimal", "pct": "<1"},
+    {"state": "Taraba", "lga": "Gashaka", "community": "Gashaka", "lat": 7.3667, "lng": 11.4868, "tons": "Below 10,000", "pct": "<5"}
+  ],
+  "top_producers": [
+    {"state": "Ondo", "tons": 78783, "pct": 24, "rank": 1},
+    {"state": "Osun", "tons": 72217, "pct": 22, "rank": 2},
+    {"state": "Cross River", "tons": 59087, "pct": 18, "rank": 3},
+    {"state": "Oyo", "tons": 32826, "pct": 10, "rank": 4},
+    {"state": "Ogun", "tons": 29544, "pct": 9, "rank": 5}
+  ],
+  "total_production_tons": 328263,
+  "cocoa_villages_mentioned": [
+    "Kiama (Kwara State)",
+    "Iyánfoworogi",
+    "Adàagbà",
+    "Wódé-Igàngán (Osun State)",
+    "Obáfemi-Owódé",
+    "Odèdá (Ogun State)",
+    "Omi-Adió",
+    "Mòyè and Olórò (Oyo State)",
+    "Owenà",
+    "Wáàsimí (Ondo State)"
+  ],
+  "climate_requirements": {
+    "rainfall_mm": "1000-3000",
+    "altitude_m": "<400",
+    "temperature_c": "18-32",
+    "humidity_pct": "70-90"
+  }
+}
