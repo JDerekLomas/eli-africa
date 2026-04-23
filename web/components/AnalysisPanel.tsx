@@ -48,7 +48,7 @@ export default function AnalysisPanel({ lat, lng, onClose }: AnalysisPanelProps)
   };
 
   return (
-    <div className="absolute top-0 right-0 bottom-0 w-[420px] bg-gray-950/95 backdrop-blur-sm border-l border-gray-800 z-[1000] overflow-y-auto">
+    <div className="absolute top-0 right-0 bottom-0 w-[520px] bg-gray-950/95 backdrop-blur-sm border-l border-gray-800 z-[1000] overflow-y-auto">
       {/* Header */}
       <div className="sticky top-0 bg-gray-950/95 backdrop-blur-sm border-b border-gray-800 px-4 py-3 flex items-center justify-between">
         <div>
