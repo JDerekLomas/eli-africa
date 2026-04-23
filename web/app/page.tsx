@@ -6,6 +6,7 @@ import LayerPanel from "@/components/LayerPanel";
 import VulnerabilityPanel from "@/components/VulnerabilityPanel";
 import SiteSelectionPanel from "@/components/SiteSelectionPanel";
 import TimeSeriesChart from "@/components/TimeSeriesChart";
+import AnalysisPanel from "@/components/AnalysisPanel";
 import { LAYERS } from "@/lib/layers";
 import { DEFAULT_WEIGHTS, VulnerabilityWeights } from "@/lib/vulnerability";
 import { DEFAULT_CRITERIA, SiteSelectionCriteria } from "@/lib/site-selection";
@@ -179,10 +180,12 @@ export default function Home() {
         {/* Footer */}
         <div className="p-4 border-t border-gray-700">
           <p className="text-[10px] text-gray-500">
-            Click anywhere on the map for 20-year time series analysis
+            Click anywhere on the map for AI land use analysis
           </p>
           <p className="text-[10px] text-gray-600 mt-1">
-            Data: ESA, MODIS, CHIRPS, ERA5, WorldPop, USGS via Google Earth Engine
+            <a href="/experiments" className="hover:text-gray-400">Experiments</a>
+            {" | "}
+            <a href="/experiments/cocoa-detection" className="hover:text-gray-400">Cocoa Detection</a>
           </p>
         </div>
       </div>
@@ -196,9 +199,9 @@ export default function Home() {
         />
       </div>
 
-      {/* Time series popup */}
+      {/* Analysis panel */}
       {selectedPoint && (
-        <TimeSeriesChart
+        <AnalysisPanel
           lat={selectedPoint.lat}
           lng={selectedPoint.lng}
           onClose={() => setSelectedPoint(null)}
