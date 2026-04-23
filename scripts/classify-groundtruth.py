@@ -52,15 +52,10 @@ def build_prompt(target_rgb_b64, target_nir_b64, meta):
         rainfall = f"{rainfall:.0f}"
 
     parts = [
-        {"text": f"""Classify this satellite tile as cocoa farm or not. Cocoa = dense dark-green tree canopy, irregular boundaries, agroforestry. Not cocoa = geometric fields, savanna, urban, sparse trees.
+        {"text": f"""Is this a cocoa farm? Cocoa in satellite imagery = dense dark-green tree canopy, irregular field boundaries, agroforestry (mixed shade trees). NOT cocoa = geometric crop fields, savanna grassland, urban, sparse vegetation, oil palm (uniform rows).
 
-Reference: COCOA (Ghana)"""},
-        {"inline_data": {"mime_type": "image/png", "data": REFS["cocoa1_rgb"]}},
-        {"text": "Reference: NOT COCOA (savanna)"},
-        {"inline_data": {"mime_type": "image/png", "data": REFS["control_rgb"]}},
-        {"text": "Classify this tile (RGB then NIR):"},
+Tile (RGB):"""},
         {"inline_data": {"mime_type": "image/png", "data": target_rgb_b64}},
-        {"inline_data": {"mime_type": "image/png", "data": target_nir_b64}},
         {"text": f"""Elevation: {elevation}m, Rainfall: {rainfall}mm. Reply ONLY JSON: {{"classification":"COCOA"|"NOT_COCOA"|"UNCERTAIN","confidence":0.0-1.0,"reasoning":"20 words max","sub_type":"monoculture"|"agroforestry"|"N/A"}}"""},
     ]
     return parts
