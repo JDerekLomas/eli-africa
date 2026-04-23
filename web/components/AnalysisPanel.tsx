@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Markdown from "react-markdown";
 
 /* eslint-disable @next/next/no-img-element */
 
@@ -107,8 +108,8 @@ export default function AnalysisPanel({ lat, lng, onClose }: AnalysisPanelProps)
             {/* Analysis text */}
             <div className="bg-gray-900 rounded-lg p-4">
               <h4 className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-2">Gemini Analysis</h4>
-              <div className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
-                {result.analysis}
+              <div className="text-sm text-gray-300 leading-relaxed [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-white [&_h2]:mt-4 [&_h2]:mb-2 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-white [&_h3]:mt-3 [&_h3]:mb-1 [&_strong]:text-white [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:space-y-1 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:space-y-1 [&_ol]:my-2 [&_p]:mb-2 [&_li]:text-gray-300">
+                <Markdown>{result.analysis}</Markdown>
               </div>
             </div>
 
