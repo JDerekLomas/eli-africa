@@ -11,6 +11,15 @@ const experiments = [
     date: "April 2026",
   },
   {
+    slug: "cocoa-rf",
+    title: "Replicating Cocoa Detection with Random Forest",
+    description:
+      "Replicated a published Sentinel-2 + GLCM + Random Forest method. 91% accuracy on Ghana validation. Applied to Nigeria.",
+    status: "results" as const,
+    stats: "91% accuracy, 21 features, SWIR bands most important",
+    date: "April 2026",
+  },
+  {
     slug: null,
     title: "Crop Type Classification",
     description:
